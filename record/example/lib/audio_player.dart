@@ -45,6 +45,14 @@ class AudioPlayerState extends State<AudioPlayer> {
         _position = position;
       }),
     );
+
+
+    _audioPlayer.onPlayerStateChanged.listen((event) {
+      debugPrint("event => ${event.name}");
+    });
+
+
+
     _durationChangedSubscription = _audioPlayer.onDurationChanged.listen(
       (duration) => setState(() {
         _duration = duration;

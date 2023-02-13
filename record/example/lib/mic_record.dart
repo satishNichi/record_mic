@@ -4,21 +4,14 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:record/record.dart';
 
-import 'package:record_example/audio_player.dart';
-import 'package:record_example/mic_record.dart';
-
-void main() => runApp(const MicRecord());
-
-
-
-class MyApp extends StatefulWidget {
-  const MyApp({Key? key}) : super(key: key);
+class MicRecord extends StatefulWidget {
+  const MicRecord({Key? key}) : super(key: key);
 
   @override
-  State<MyApp> createState() => _MyAppState();
+  State<MicRecord> createState() => _MicRecordState();
 }
 
-class _MyAppState extends State<MyApp> {
+class _MicRecordState extends State<MicRecord> {
   bool showPlayer = false;
   String? audioPath;
 
@@ -33,22 +26,12 @@ class _MyAppState extends State<MyApp> {
     return MaterialApp(
       home: Scaffold(
         body: Center(
-          child: showPlayer
-              ? Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 25),
-            child: AudioPlayer(
-              source: audioPath!,
-              onDelete: () {
-                setState(() => showPlayer = false);
-              },
-            ),
-          )
-              : AudioRecorder(
+          child: AudioRecorder(
             onStop: (path) {
               if (kDebugMode) print('Recorded file path: $path');
               setState(() {
                 audioPath = path;
-                showPlayer = true;
+                // showPlayer = false;
               });
             },
           ),
@@ -58,7 +41,7 @@ class _MyAppState extends State<MyApp> {
   }
 }
 
-
+/// audio screen
 
 class AudioRecorder extends StatefulWidget {
   final void Function(String path) onStop;
@@ -71,22 +54,29 @@ class AudioRecorder extends StatefulWidget {
 
 class _AudioRecorderState extends State<AudioRecorder> {
   int _recordDuration = 0;
-  Timer? _timer;
+  int pauseSec = 2;
+  int minAmpValue = -30;
+  Timer? _timer, _pauseTimer;
   final _audioRecorder = Record();
   StreamSubscription<RecordState>? _recordSub;
   RecordState _recordState = RecordState.stop;
   StreamSubscription<Amplitude>? _amplitudeSub;
   Amplitude? _amplitude;
+  bool isVoiceRecording = false;
 
   @override
   void initState() {
+
     _recordSub = _audioRecorder.onStateChanged().listen((recordState) {
       setState(() => _recordState = recordState);
     });
-
     _amplitudeSub = _audioRecorder
         .onAmplitudeChanged(const Duration(milliseconds: 300))
         .listen((amp) => setState(() => _amplitude = amp));
+
+    _audioRecorder.getAmplitude().then((value) => (value) {
+          debugPrint("audio amplitude => $value");
+        });
 
     super.initState();
   }
@@ -96,19 +86,19 @@ class _AudioRecorderState extends State<AudioRecorder> {
       if (await _audioRecorder.hasPermission()) {
         // We don't do anything with this but printing
         final isSupported = await _audioRecorder.isEncoderSupported(
-          AudioEncoder.aacLc,
+          AudioEncoder.wav,
         );
         if (kDebugMode) {
-          print('${AudioEncoder.aacLc.name} supported: $isSupported');
+          print('${AudioEncoder.wav.name} supported: $isSupported');
         }
 
         // final devs = await _audioRecorder.listInputDevices();
         // final isRecording = await _audioRecorder.isRecording();
 
-        await _audioRecorder.start();
+        await _audioRecorder.start(encoder: AudioEncoder.aacLc);
         _recordDuration = 0;
-
         _startTimer();
+        pauseTimerInitial();
       }
     } catch (e) {
       if (kDebugMode) {
@@ -118,7 +108,9 @@ class _AudioRecorderState extends State<AudioRecorder> {
   }
 
   Future<void> _stop() async {
+    debugPrint(" _stop method called => ");
     _timer?.cancel();
+    _pauseTimer?.cancel();
     _recordDuration = 0;
 
     final path = await _audioRecorder.stop();
@@ -169,6 +161,7 @@ class _AudioRecorderState extends State<AudioRecorder> {
   @override
   void dispose() {
     _timer?.cancel();
+    _pauseTimer?.cancel();
     _recordSub?.cancel();
     _amplitudeSub?.cancel();
     _audioRecorder.dispose();
@@ -251,7 +244,7 @@ class _AudioRecorderState extends State<AudioRecorder> {
 
   String _formatNumber(int number) {
     String numberStr = number.toString();
-    if (number < 10) {
+    if (number < -25) {
       numberStr = '0$numberStr';
     }
 
@@ -260,10 +253,32 @@ class _AudioRecorderState extends State<AudioRecorder> {
 
   void _startTimer() {
     _timer?.cancel();
-
     _timer = Timer.periodic(const Duration(seconds: 1), (Timer t) {
+      checkAmp();
       setState(() => _recordDuration++);
     });
   }
-}
 
+  void pauseTimerInitial() {
+    _pauseTimer?.cancel();
+    _pauseTimer = Timer.periodic(Duration(seconds: pauseSec), (timer) {
+      debugPrint("record on timer => $_recordState");
+      if (_recordState != RecordState.stop) _stop();
+    });
+  }
+
+  void checkAmp() {
+    if (_amplitude != null) {
+      if (_amplitude!.current > minAmpValue) {
+        debugPrint("with voice amp => ${_amplitude!.current}");
+
+        /// reset counter;
+        debugPrint("reset timer => ");
+        pauseTimerInitial();
+        // _recordState = RecordState.stop;
+      } else {
+        debugPrint("no voice amp=> ${_amplitude!.current}");
+      }
+    }
+  }
+}

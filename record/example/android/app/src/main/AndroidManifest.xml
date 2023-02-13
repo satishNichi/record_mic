@@ -1,7 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.llfbandit.record_example">
     
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
-    
+    <uses-permission android:name="android.permission.WRITE_INTERNAL_STORAGE" />
+
     <application
         android:name="${applicationName}"
         android:label="record_example"
